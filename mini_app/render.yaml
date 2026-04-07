@@ -1,0 +1,16 @@
+# Render.com deployment configuration
+services:
+  - type: web
+    name: lunch-tracker-app
+    env: python
+    buildCommand: pip install -r mini_app/requirements.txt
+    startCommand: cd mini_app && gunicorn -w 4 -b 0.0.0.0:$PORT app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: BOT_TOKEN
+        sync: false  # Set in Render dashboard
+      - key: ADMIN_IDS
+        sync: false  # Set in Render dashboard
+      - key: MINI_APP_URL
+        sync: false  # Will be auto-generated

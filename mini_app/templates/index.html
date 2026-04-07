@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Lunch Tracker</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --tg-bg-color: var(--tg-theme-bg-color, #ffffff);
+            --tg-text-color: var(--tg-theme-text-color, #000000);
+            --tg-hint-color: var(--tg-theme-hint-color, #999999);
+            --tg-link-color: var(--tg-theme-link-color, #2481cc);
+            --tg-button-color: var(--tg-theme-button-color, #2481cc);
+            --tg-button-text-color: var(--tg-theme-button-text-color, #ffffff);
+            --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f5f5f5);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--tg-bg-color);
+            color: var(--tg-text-color);
+            min-height: 100vh;
+            padding-bottom: 20px;
+        }
+        .header {
+            background: var(--tg-secondary-bg);
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+        .header h1 { font-size: 20px; font-weight: 600; }
+        .header .date { font-size: 14px; color: var(--tg-hint-color); margin-top: 5px; }
+        .container { padding: 15px; max-width: 500px; margin: 0 auto; }
+        .card {
+            background: var(--tg-secondary-bg);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .card-title { font-size: 14px; color: var(--tg-hint-color); text-transform: uppercase; margin-bottom: 8px; }
+        .card-value { font-size: 24px; font-weight: 600; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .stat-item {
+            background: var(--tg-secondary-bg);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--tg-button-color); }
+        .stat-label { font-size: 12px; color: var(--tg-hint-color); margin-top: 4px; }
+        .btn {
+            background: var(--tg-button-color);
+            color: var(--tg-button-text-color);
+            border: none;
+            border-radius: 10px;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+        .btn-success { background: #28a745; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .list { background: var(--tg-secondary-bg); border-radius: 12px; overflow: hidden; }
+        .list-item {
+            padding: 16px;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .tabs {
+            display: flex;
+            background: var(--tg-secondary-bg);
+            border-radius: 10px;
+            padding: 4px;
+            margin-bottom: 16px;
+        }
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .tab.active {
+            background: var(--tg-button-color);
+            color: var(--tg-button-text-color);
+        }
+        .section { display: none; }
+        .section.active { display: block; }
+        .loading { text-align: center; padding: 40px; }
+        .spinner {
+            border: 3px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            border-top: 3px solid var(--tg-button-color);
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Lunch Tracker</h1>
+        <div class="date" id="currentDate"></div>
+    </div>
+    <div class="container">
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div>Yuklanmoqda...</div>
+        </div>
+        <div id="content" style="display: none;">
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('balance')">Balans</div>
+                <div class="tab" onclick="showTab('today')">Bugun</div>
+                <div class="tab" onclick="showTab('admin')">Admin</div>
+            </div>
+            <div class="section active" id="balance-tab">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="attendanceCount">-</div>
+                        <div class="stat-label">Kelgan kunlar</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="dailyRate">-</div>
+                        <div class="stat-label">Kunlik</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Ishlab topilgan</div>
+                    <div class="card-value" id="earnedAmount">-</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">To'langan</div>
+                    <div class="card-value" id="paidAmount">-</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Qoldiq</div>
+                    <div class="card-value" id="debtAmount">-</div>
+                </div>
+                <button class="btn btn-success" id="markPaidBtn" onclick="markPaid()">
+                    Men to'ladim
+                </button>
+                <h3 style="margin: 20px 0 12px; font-size: 16px;">To'lovlar tarixi</h3>
+                <div class="list" id="paymentsList"></div>
+            </div>
+            <div class="section" id="today-tab">
+                <div class="card">
+                    <div class="card-title">Bugun ovqatlanish</div>
+                    <div style="margin-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>Boradi:</span>
+                            <strong id="presentCount">-</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Bormaydi:</span>
+                            <strong id="absentCount">-</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="list" id="presentList"></div>
+            </div>
+            <div class="section" id="admin-tab">
+                <h3 style="margin-bottom: 12px; font-size: 16px;">Oylik hisobot</h3>
+                <div class="list" id="adminSummary"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+        const user = tg.initDataUnsafe?.user;
+        const userId = user?.id;
+        let employeeId = null;
+        
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('uz-UZ').format(Math.round(amount)) + " so'm";
+        }
+        
+        function showDate() {
+            const now = new Date();
+            document.getElementById('currentDate').textContent = now.toLocaleDateString('uz-UZ', { 
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+            });
+        }
+        
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+            if (tabName === 'today') loadToday();
+            if (tabName === 'admin') loadAdminSummary();
+        }
+        
+        async function loadUserData() {
+            if (!userId) {
+                document.getElementById('loading').innerHTML = '<div style="color: red;">Telegram ma\'lumotlari topilmadi</div>';
+                return;
+            }
+            try {
+                const response = await fetch(`/api/user/${userId}`);
+                if (!response.ok) throw new Error('User not found');
+                const userData = await response.json();
+                employeeId = userData.id;
+                await loadBalance(employeeId);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+            } catch (error) {
+                document.getElementById('loading').innerHTML = '<div style="color: red;">Foydalanuvchi topilmadi</div>';
+            }
+        }
+        
+        async function loadBalance(empId) {
+            try {
+                const response = await fetch(`/api/balance/${empId}`);
+                const data = await response.json();
+                document.getElementById('attendanceCount').textContent = data.attendance_count;
+                document.getElementById('dailyRate').textContent = formatMoney(data.daily_rate);
+                document.getElementById('earnedAmount').textContent = formatMoney(data.earned);
+                document.getElementById('paidAmount').textContent = formatMoney(data.paid);
+                document.getElementById('debtAmount').textContent = formatMoney(data.debt);
+                if (data.is_paid) {
+                    const btn = document.getElementById('markPaidBtn');
+                    btn.textContent = 'Tasdiqlangan';
+                    btn.disabled = true;
+                }
+                const paymentsList = document.getElementById('paymentsList');
+                if (data.payments && data.payments.length > 0) {
+                    paymentsList.innerHTML = data.payments.map(p => 
+                        `<div class="list-item"><span>${formatMoney(p.amount)}</span><span style="color: var(--tg-hint-color); font-size: 12px;">${p.date}</span></div>`
+                    ).join('');
+                } else {
+                    paymentsList.innerHTML = '<div class="list-item"><span>Hali to\'lov yo\'q</span></div>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        async function loadToday() {
+            try {
+                const response = await fetch('/api/today');
+                const data = await response.json();
+                document.getElementById('presentCount').textContent = data.present.length;
+                document.getElementById('absentCount').textContent = data.absent.length;
+                const presentList = document.getElementById('presentList');
+                if (data.present.length > 0) {
+                    presentList.innerHTML = data.present.map(p => `<div class="list-item"><span>${p.name}</span><span style="color: green;">Boradi</span></div>`).join('');
+                } else {
+                    presentList.innerHTML = '<div class="list-item"><span>Hali ro\'yxatdan o\'tmagan</span></div>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        async function loadAdminSummary() {
+            try {
+                const response = await fetch('/api/admin/summary');
+                const data = await response.json();
+                const adminList = document.getElementById('adminSummary');
+                adminList.innerHTML = data.employees.map(emp => 
+                    `<div class="list-item"><span>${emp.name}</span><span>${formatMoney(emp.debt)}</span></div>`
+                ).join('');
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        async function markPaid() {
+            if (!employeeId) return;
+            const btn = document.getElementById('markPaidBtn');
+            btn.disabled = true;
+            try {
+                const response = await fetch('/api/mark-paid', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ employee_id: employeeId })
+                });
+                if (response.ok) {
+                    btn.textContent = 'Tasdiqlangan';
+                    tg.showAlert('To\'lov belgilandi!');
+                } else {
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                btn.disabled = false;
+            }
+        }
+        
+        showDate();
+        loadUserData();
+    </script>
+</body>
+</html>
