@@ -109,6 +109,34 @@
             margin: 0 auto 16px;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Not registered state */
+        .not-registered {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .not-registered-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        .not-registered h2 {
+            font-size: 20px;
+            margin-bottom: 12px;
+        }
+        .not-registered p {
+            color: var(--tg-hint-color);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+        .telegram-id {
+            background: var(--tg-secondary-bg);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 18px;
+            margin: 16px 0;
+            user-select: all;
+        }
     </style>
 </head>
 <body>
@@ -121,6 +149,30 @@
             <div class="spinner"></div>
             <div>Yuklanmoqda...</div>
         </div>
+        
+        <!-- Not Registered State -->
+        <div id="not-registered" style="display: none;">
+            <div class="not-registered">
+                <div class="not-registered-icon">👋</div>
+                <h2>Salom!</h2>
+                <p>Siz hali ro'yxatdan o'tmagansiz. Iltimos, quyidagi qadamlarni bajaring:</p>
+                
+                <div class="card" style="text-align: left;">
+                    <p><strong>1.</strong> Botga o'tib <strong>/start</strong> bosing</p>
+                    <p style="margin-top: 12px;"><strong>2.</strong> Admin ga sizning ID ingizni ayting:</p>
+                    <div class="telegram-id" id="userTelegramId"></div>
+                    <p style="margin-top: 12px; color: var(--tg-hint-color); font-size: 14px;">
+                        Bu ID ni nusxa olib, admin ga yuboring
+                    </p>
+                </div>
+                
+                <button class="btn" onclick="openBot()">
+                    Bot ga o'tish
+                </button>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
         <div id="content" style="display: none;">
             <div class="tabs">
                 <div class="tab active" onclick="showTab('balance')">Balans</div>
@@ -197,6 +249,10 @@
             });
         }
         
+        function openBot() {
+            tg.openTelegramLink('https://t.me/' + tg.initDataUnsafe.bot);
+        }
+        
         function showTab(tabName) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -211,16 +267,25 @@
                 document.getElementById('loading').innerHTML = '<div style="color: red;">Telegram ma\'lumotlari topilmadi</div>';
                 return;
             }
+            
             try {
                 const response = await fetch(`/api/user/${userId}`);
-                if (!response.ok) throw new Error('User not found');
-                const userData = await response.json();
-                employeeId = userData.id;
-                await loadBalance(employeeId);
+                const data = await response.json();
+                
                 document.getElementById('loading').style.display = 'none';
-                document.getElementById('content').style.display = 'block';
+                
+                if (!data.registered) {
+                    // Ro'yxatdan o'tmagan
+                    document.getElementById('not-registered').style.display = 'block';
+                    document.getElementById('userTelegramId').textContent = userId;
+                } else {
+                    // Ro'yxatdan o'tgan
+                    employeeId = data.id;
+                    document.getElementById('content').style.display = 'block';
+                    await loadBalance(employeeId);
+                }
             } catch (error) {
-                document.getElementById('loading').innerHTML = '<div style="color: red;">Foydalanuvchi topilmadi</div>';
+                document.getElementById('loading').innerHTML = '<div style="color: red;">Xatolik yuz berdi</div>';
             }
         }
         

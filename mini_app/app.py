@@ -39,9 +39,15 @@ def get_user(telegram_id):
         ).fetchone()
         
         if not emp:
-            return jsonify({'error': 'User not found'}), 404
+            # Foydalanuvchi topilmadi - ro'yxatdan o'tmagan
+            return jsonify({
+                'registered': False,
+                'telegram_id': telegram_id,
+                'message': 'Siz hali ro\'yxatdan o\'tmagansiz'
+            }), 200
         
         return jsonify({
+            'registered': True,
             'id': emp['id'],
             'first_name': emp['first_name'],
             'last_name': emp['last_name'],
