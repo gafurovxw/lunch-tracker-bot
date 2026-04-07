@@ -12,16 +12,14 @@ from datetime import date
 app = Flask(__name__, template_folder='templates')
 CORS(app)
 
-# Database path - Render da /tmp ichida saqlanadi
-DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'lunch_tracker.db')
+# Database path - Render ephemeral disk
+# Use /tmp for SQLite (Render allows writing here)
+DB_PATH = os.environ.get('DATABASE_PATH', '/tmp/lunch_tracker.db')
 
 
 def init_db():
     """Initialize database with tables"""
-    # Check if parent directory exists
-    parent_dir = os.path.dirname(DB_PATH)
-    if parent_dir and not os.path.exists(parent_dir):
-        os.makedirs(parent_dir, exist_ok=True)
+    print(f"Initializing database at: {DB_PATH}")
     
     conn = sqlite3.connect(DB_PATH)
     try:
@@ -66,23 +64,24 @@ def init_db():
             );
         """)
         conn.commit()
-        print(f"Database initialized at: {DB_PATH}")
+        print("Database initialized successfully!")
+        return True
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+        return False
     finally:
         conn.close()
 
 
 def get_db():
     """Database connection"""
-    # Ensure database exists
-    if not os.path.exists(DB_PATH):
-        init_db()
-    
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 # Initialize database on startup
+print("Starting database initialization...")
 init_db()
 
 
@@ -92,12 +91,35 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/api/init-db', methods=['POST'])
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    try:
+        conn = get_db()
+        conn.execute("SELECT 1 FROM employees LIMIT 1")
+        conn.close()
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'db_path': DB_PATH
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'db_path': DB_PATH
+        }), 500
+
+
+@app.route('/api/init-db', methods=['GET', 'POST'])
 def api_init_db():
     """Initialize database endpoint"""
     try:
-        init_db()
-        return jsonify({'success': True, 'message': 'Database initialized'})
+        success = init_db()
+        if success:
+            return jsonify({'success': True, 'message': 'Database initialized', 'path': DB_PATH})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to initialize'}), 500
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
