@@ -3,23 +3,87 @@ Telegram Mini App - Backend API
 Flask-based API for the Lunch Tracker Mini App
 """
 
-from flask import Flask, jsonify, request, render_template, send_from_directory
+from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import sqlite3
 import os
 from datetime import date
 
-app = Flask(__name__, static_folder='static', template_folder='templates')
+app = Flask(__name__, template_folder='templates')
 CORS(app)
 
+# Database path - Render da /tmp ichida saqlanadi
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'lunch_tracker.db')
+
+
+def init_db():
+    """Initialize database with tables"""
+    # Check if parent directory exists
+    parent_dir = os.path.dirname(DB_PATH)
+    if parent_dir and not os.path.exists(parent_dir):
+        os.makedirs(parent_dir, exist_ok=True)
+    
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS employees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                first_name TEXT NOT NULL,
+                last_name TEXT,
+                position TEXT,
+                telegram_id INTEGER,
+                monthly_salary REAL DEFAULT 200000,
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now', 'localtime'))
+            );
+
+            CREATE TABLE IF NOT EXISTS attendance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                status INTEGER DEFAULT 1,
+                UNIQUE(employee_id, date),
+                FOREIGN KEY (employee_id) REFERENCES employees(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                date TEXT NOT NULL,
+                note TEXT,
+                FOREIGN KEY (employee_id) REFERENCES employees(id)
+            );
+            
+            CREATE TABLE IF NOT EXISTS paid_status (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                is_paid INTEGER DEFAULT 0,
+                UNIQUE(employee_id, year, month),
+                FOREIGN KEY (employee_id) REFERENCES employees(id)
+            );
+        """)
+        conn.commit()
+        print(f"Database initialized at: {DB_PATH}")
+    finally:
+        conn.close()
 
 
 def get_db():
     """Database connection"""
+    # Ensure database exists
+    if not os.path.exists(DB_PATH):
+        init_db()
+    
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# Initialize database on startup
+init_db()
 
 
 @app.route('/')
@@ -28,18 +92,28 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/api/init-db', methods=['POST'])
+def api_init_db():
+    """Initialize database endpoint"""
+    try:
+        init_db()
+        return jsonify({'success': True, 'message': 'Database initialized'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/user/<int:telegram_id>')
 def get_user(telegram_id):
     """Get user info by Telegram ID"""
-    conn = get_db()
     try:
+        conn = get_db()
         emp = conn.execute(
             "SELECT * FROM employees WHERE telegram_id = ? AND is_active = 1",
             (telegram_id,)
         ).fetchone()
+        conn.close()
         
         if not emp:
-            # Foydalanuvchi topilmadi - ro'yxatdan o'tmagan
             return jsonify({
                 'registered': False,
                 'telegram_id': telegram_id,
@@ -54,20 +128,21 @@ def get_user(telegram_id):
             'position': emp['position'],
             'monthly_salary': emp['monthly_salary']
         })
-    finally:
-        conn.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/balance/<int:employee_id>')
 def get_balance(employee_id):
     """Get employee balance"""
-    conn = get_db()
     try:
+        conn = get_db()
         today = date.today()
         year, month = today.year, today.month
         
         emp = conn.execute("SELECT * FROM employees WHERE id = ?", (employee_id,)).fetchone()
         if not emp:
+            conn.close()
             return jsonify({'error': 'Employee not found'}), 404
         
         # Attendance
@@ -99,6 +174,8 @@ def get_balance(employee_id):
         ).fetchone()
         is_paid = row['is_paid'] == 1 if row else False
         
+        conn.close()
+        
         return jsonify({
             'employee': {
                 'id': emp['id'],
@@ -115,15 +192,15 @@ def get_balance(employee_id):
             'is_paid': is_paid,
             'payments': [{'amount': p['amount'], 'date': p['date'], 'note': p['note']} for p in payments]
         })
-    finally:
-        conn.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/today')
 def get_today():
     """Get today's attendance"""
-    conn = get_db()
     try:
+        conn = get_db()
         today = date.today()
         records = conn.execute(
             """SELECT e.id, e.first_name, e.last_name, a.status
@@ -133,6 +210,7 @@ def get_today():
                ORDER BY e.first_name""",
             (today.isoformat(),)
         ).fetchall()
+        conn.close()
         
         present = [r for r in records if r['status'] == 1]
         absent = [r for r in records if r['status'] == 0]
@@ -142,8 +220,8 @@ def get_today():
             'present': [{'id': r['id'], 'name': f"{r['first_name']} {r['last_name'] or ''}".strip()} for r in present],
             'absent': [{'id': r['id'], 'name': f"{r['first_name']} {r['last_name'] or ''}".strip()} for r in absent]
         })
-    finally:
-        conn.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/mark-paid', methods=['POST'])
@@ -155,8 +233,8 @@ def mark_paid():
     if not employee_id:
         return jsonify({'error': 'Employee ID required'}), 400
     
-    conn = get_db()
     try:
+        conn = get_db()
         today = date.today()
         conn.execute(
             """INSERT INTO paid_status (employee_id, year, month, is_paid) 
@@ -166,16 +244,17 @@ def mark_paid():
             (employee_id, today.year, today.month)
         )
         conn.commit()
-        return jsonify({'success': True})
-    finally:
         conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/admin/summary')
 def admin_summary():
     """Admin summary"""
-    conn = get_db()
     try:
+        conn = get_db()
         today = date.today()
         year, month = today.year, today.month
         
@@ -209,13 +288,15 @@ def admin_summary():
                 'debt': round(max(0, earned - total_paid), 2)
             })
         
+        conn.close()
+        
         return jsonify({
             'month': month,
             'year': year,
             'employees': summary
         })
-    finally:
-        conn.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
